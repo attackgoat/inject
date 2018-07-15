@@ -7,11 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/facebookgo/ensure"
-	"github.com/facebookgo/inject"
+	"inject"
 
-	injecttesta "github.com/facebookgo/inject/injecttesta"
-	injecttestb "github.com/facebookgo/inject/injecttestb"
+	"github.com/facebookgo/ensure"
+
+	injecttesta "inject/injecttesta"
+	injecttestb "inject/injecttestb"
 )
 
 func init() {
@@ -238,7 +239,7 @@ func TestProvideTwoOfTheSame(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
-	const msg = "provided two unnamed instances of type *github.com/facebookgo/inject_test.TypeAnswerStruct"
+	const msg = "provided two unnamed instances of type *inject_test.TypeAnswerStruct"
 	if err.Error() != msg {
 		t.Fatalf("expected:\n%s\nactual:\n%s", msg, err.Error())
 	}
@@ -251,7 +252,7 @@ func TestProvideTwoOfTheSameWithPopulate(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
-	const msg = "provided two unnamed instances of type *github.com/facebookgo/inject_test.TypeAnswerStruct"
+	const msg = "provided two unnamed instances of type *inject_test.TypeAnswerStruct"
 	if err.Error() != msg {
 		t.Fatalf("expected:\n%s\nactual:\n%s", msg, err.Error())
 	}
@@ -992,5 +993,157 @@ func TestForSameNameButDifferentPackage(t *testing.T) {
 	}
 	if err := g.Populate(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+type mock struct {
+	Mocker mocker `inject:""`
+}
+
+type mocker interface {
+	do() string
+}
+
+type mockerA struct {
+}
+
+type mockerB struct {
+}
+
+func (m *mockerA) do() string {
+	return "a"
+}
+
+func (m *mockerB) do() string {
+	return "b"
+}
+
+func TestTwoNonMocks(t *testing.T) {
+	var g inject.Graph
+	var m mock
+	err := g.Provide(
+		&inject.Object{Value: &m},
+		&inject.Object{Value: &mockerA{}},
+		&inject.Object{Value: &mockerB{}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = g.Populate()
+	if err == nil {
+		t.Fatalf("Expected error")
+	}
+
+	const msg = "found two assignable values for field Mocker in type *inject_test.mock. one type *inject_test.mockerA with value &{} and another type *inject_test.mockerB with value &{}"
+	if err.Error() != msg {
+		t.Fatal(err)
+	}
+}
+
+func TestSameButMocks(t *testing.T) {
+	var g inject.Graph
+	var m mock
+	err := g.Provide(
+		&inject.Object{Value: &m},
+		&inject.Object{Value: &mockerA{}},
+		&inject.Object{Mock: true, Value: &mockerA{}},
+	)
+	if err == nil {
+		t.Fatal("Expected error")
+	}
+
+	const msg = "provided two unnamed instances of type *inject_test.mockerA"
+	if err.Error() != msg {
+		t.Fatal(err)
+	}
+}
+
+func TestMockBA1(t *testing.T) {
+	var g inject.Graph
+	var m mock
+	err := g.Provide(
+		&inject.Object{Value: &m},
+		&inject.Object{Value: &mockerB{}},
+		&inject.Object{Mock: true, Value: &mockerA{}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = g.Populate()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if m.Mocker.do() != "a" {
+		t.Fatal("Expected a")
+	}
+}
+
+func TestMockAB1(t *testing.T) {
+	var g inject.Graph
+	var m mock
+	err := g.Provide(
+		&inject.Object{Value: &m},
+		&inject.Object{Value: &mockerA{}},
+		&inject.Object{Mock: true, Value: &mockerB{}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = g.Populate()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if m.Mocker.do() != "b" {
+		t.Fatal("Expected b")
+	}
+}
+
+
+func TestMockAB2(t *testing.T) {
+	var g inject.Graph
+	var m mock
+	err := g.Provide(
+		&inject.Object{Value: &m},
+		&inject.Object{Mock: true, Value: &mockerA{}},
+		&inject.Object{Value: &mockerB{}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = g.Populate()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if m.Mocker.do() != "a" {
+		t.Fatal("Expected a")
+	}
+}
+
+func TestMockBA2(t *testing.T) {
+	var g inject.Graph
+	var m mock
+	err := g.Provide(
+		&inject.Object{Value: &m},
+		&inject.Object{Mock: true, Value: &mockerB{}},
+		&inject.Object{Value: &mockerA{}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = g.Populate()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if m.Mocker.do() != "b" {
+		t.Fatal("Expected b")
 	}
 }

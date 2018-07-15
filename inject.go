@@ -55,6 +55,7 @@ func Populate(values ...interface{}) error {
 // An Object in the Graph.
 type Object struct {
 	Value        interface{}
+	Mock         bool               // If true, the Value will be the preferred value during population
 	Name         string             // Optional
 	Complete     bool               // If true, the Value will be considered complete
 	Fields       map[string]*Object // Populated with the field names that were injected and their corresponding *Object.
@@ -466,7 +467,7 @@ func (g *Graph) populateUnnamedInterface(o *Object) error {
 		// Find one, and only one assignable value for the field.
 		var found *Object
 		for _, existing := range g.unnamed {
-			if existing.private {
+			if existing.private || existing.Mock {
 				continue
 			}
 			if existing.reflectType.AssignableTo(fieldType) {
@@ -483,17 +484,39 @@ func (g *Graph) populateUnnamedInterface(o *Object) error {
 					)
 				}
 				found = existing
-				field.Set(reflect.ValueOf(existing.Value))
-				if g.Logger != nil {
-					g.Logger.Debugf(
-						"assigned existing %s to interface field %s in %s",
-						existing,
+			}
+		}
+		for _, existing := range g.unnamed {
+			if existing.private || !existing.Mock {
+				continue
+			}
+			if existing.reflectType.AssignableTo(fieldType) {
+				if found != nil && found.Mock {
+					return fmt.Errorf(
+						"found two assignable values for field %s in type %s. one type "+
+							"%s with value %v and another type %s with value %v",
 						o.reflectType.Elem().Field(i).Name,
-						o,
+						o.reflectType,
+						found.reflectType,
+						found.Value,
+						existing.reflectType,
+						existing.reflectValue,
 					)
 				}
-				o.addDep(fieldName, existing)
+				found = existing
 			}
+		}
+		if found != nil {
+			field.Set(reflect.ValueOf(found.Value))
+			if g.Logger != nil {
+				g.Logger.Debugf(
+					"assigned existing %s to interface field %s in %s",
+					found,
+					o.reflectType.Elem().Field(i).Name,
+					o,
+				)
+			}
+			o.addDep(fieldName, found)
 		}
 
 		// If we didn't find an assignable value, we're missing something.
